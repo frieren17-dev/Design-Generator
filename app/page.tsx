@@ -5,7 +5,9 @@ import { toast } from "sonner";
 import { Header } from "@/components/Header";
 import { InputForm } from "@/components/InputForm";
 import { ConceptGrid } from "@/components/ConceptGrid";
+import { MoodboardSection } from "@/components/MoodboardSection";
 import { buildConcepts, SAMPLE_INPUTS } from "@/lib/concepts";
+import { buildMoodboards } from "@/lib/moodboards";
 import { loadState, saveState } from "@/lib/storage";
 import { downloadConceptHtml } from "@/lib/export-html";
 import type {
@@ -13,6 +15,7 @@ import type {
   ConceptSide,
   DesignInputs,
   GenerateResponse,
+  Moodboard,
 } from "@/lib/types";
 
 const sideToImageKey = (side: ConceptSide) =>
@@ -20,18 +23,35 @@ const sideToImageKey = (side: ConceptSide) =>
 const sideToPromptKey = (side: ConceptSide) =>
   side === "front" ? ("frontPrompt" as const) : ("backPrompt" as const);
 
+/** Low-level call to the generation API. Returns the image URL or throws. */
+async function requestImage(prompt: string, side: ConceptSide): Promise<GenerateResponse> {
+  const res = await fetch("/api/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, side }),
+  });
+  const data = (await res.json()) as GenerateResponse;
+  if (!res.ok || !data.url) throw new Error(data.error ?? "Generation failed.");
+  return data;
+}
+
 export default function Home() {
   const [inputs, setInputs] = useState<DesignInputs>(SAMPLE_INPUTS);
+  const [moodboards, setMoodboards] = useState<Moodboard[]>([]);
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [generating, setGenerating] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   // Always-current snapshots so async handlers read fresh prompts/inputs.
   const conceptsRef = useRef<Concept[]>(concepts);
+  const moodboardsRef = useRef<Moodboard[]>(moodboards);
   const inputsRef = useRef<DesignInputs>(inputs);
   useEffect(() => {
     conceptsRef.current = concepts;
   }, [concepts]);
+  useEffect(() => {
+    moodboardsRef.current = moodboards;
+  }, [moodboards]);
   useEffect(() => {
     inputsRef.current = inputs;
   }, [inputs]);
@@ -45,6 +65,7 @@ export default function Home() {
     if (saved) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setInputs(saved.inputs);
+      setMoodboards(saved.moodboards);
       setConcepts(saved.concepts);
     }
     setHydrated(true);
@@ -52,12 +73,18 @@ export default function Home() {
 
   // Persist after every change, once hydrated.
   useEffect(() => {
-    if (hydrated) saveState(inputs, concepts);
-  }, [inputs, concepts, hydrated]);
+    if (hydrated) saveState(inputs, moodboards, concepts);
+  }, [inputs, moodboards, concepts, hydrated]);
 
   const updateConcept = useCallback(
     (id: string, updater: (c: Concept) => Concept) =>
       setConcepts((prev) => prev.map((c) => (c.id === id ? updater(c) : c))),
+    [],
+  );
+
+  const updateMoodboard = useCallback(
+    (id: string, updater: (m: Moodboard) => Moodboard) =>
+      setMoodboards((prev) => prev.map((m) => (m.id === id ? updater(m) : m))),
     [],
   );
 
@@ -69,21 +96,10 @@ export default function Home() {
       const prompt = concept[sideToPromptKey(side)];
       const imageKey = sideToImageKey(side);
 
-      updateConcept(conceptId, (c) => ({
-        ...c,
-        [imageKey]: { status: "loading" },
-      }));
+      updateConcept(conceptId, (c) => ({ ...c, [imageKey]: { status: "loading" } }));
 
       try {
-        const res = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, side }),
-        });
-        const data = (await res.json()) as GenerateResponse;
-        if (!res.ok || !data.url) {
-          throw new Error(data.error ?? "Generation failed.");
-        }
+        const data = await requestImage(prompt, side);
         updateConcept(conceptId, (c) => ({
           ...c,
           [imageKey]: { status: "done", url: data.url, taskId: data.taskId },
@@ -102,8 +118,41 @@ export default function Home() {
     [updateConcept],
   );
 
-  /** "Generate Now": build six concepts and generate all front images. */
+  /** Generate (or regenerate) a moodboard's mood/reference image. */
+  const generateMood = useCallback(
+    async (boardId: string) => {
+      const board = moodboardsRef.current.find((m) => m.id === boardId);
+      if (!board) return;
+
+      updateMoodboard(boardId, (m) => ({ ...m, moodImage: { status: "loading" } }));
+
+      try {
+        const data = await requestImage(board.moodPrompt, "mood");
+        updateMoodboard(boardId, (m) => ({
+          ...m,
+          moodImage: { status: "done", url: data.url, taskId: data.taskId },
+        }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Generation failed.";
+        updateMoodboard(boardId, (m) => ({
+          ...m,
+          moodImage: { status: "error", error: message },
+        }));
+        toast.error(`${board.direction} mood image failed`, { description: message });
+      }
+    },
+    [updateMoodboard],
+  );
+
+  /**
+   * "Generate Now": build the three moodboards (instant) + six concepts, then
+   * generate all front homepage images. Mood images are generated on demand.
+   */
   const handleGenerate = useCallback(async () => {
+    const boards = buildMoodboards(inputs);
+    setMoodboards(boards);
+    moodboardsRef.current = boards;
+
     const fresh = buildConcepts(inputs).map((c) => ({
       ...c,
       frontImage: { status: "loading" as const },
@@ -112,8 +161,8 @@ export default function Home() {
     conceptsRef.current = fresh;
     setGenerating(true);
 
-    toast.info("Generating 6 homepage concepts…", {
-      description: "This can take up to a minute or two.",
+    toast.info("Built 3 moodboards · generating 6 homepages…", {
+      description: "Homepages can take a minute or two. Mood images generate on demand.",
     });
 
     const results = await Promise.allSettled(
@@ -127,6 +176,7 @@ export default function Home() {
 
   const handleReset = useCallback(() => {
     setInputs(SAMPLE_INPUTS);
+    setMoodboards([]);
     setConcepts([]);
     toast.info("Reset to the sample brief.");
   }, []);
@@ -165,8 +215,8 @@ export default function Home() {
   return (
     <>
       <Header />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,360px)_1fr] lg:items-start">
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,340px)_1fr] lg:items-start">
           <div className="lg:sticky lg:top-6">
             <InputForm
               inputs={inputs}
@@ -177,47 +227,54 @@ export default function Home() {
             />
           </div>
 
-          <section>
-            {concepts.length === 0 ? (
+          <div className="space-y-10">
+            {moodboards.length === 0 && concepts.length === 0 ? (
               <div className="animate-rise grid min-h-[360px] place-items-center rounded-2xl border border-dashed border-border bg-card/40 p-10 text-center backdrop-blur-sm">
                 <div className="max-w-sm space-y-3">
                   <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-primary">
-                    Empty moodboard
+                    Empty studio
                   </span>
                   <h2 className="font-display text-2xl font-semibold tracking-tight">
                     Nothing brewing yet
                   </h2>
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    Fill in your brief and hit <strong>Generate Now</strong> to conjure
-                    six homepage directions — two Minimalist, two Contemporary, two
-                    Dynamic.
+                    Fill in your brief and hit <strong>Generate Now</strong>. You&apos;ll
+                    get three curated moodboards, then six homepage directions designed
+                    from them.
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="space-y-5">
-                <div className="flex items-end justify-between border-b border-border/70 pb-3">
-                  <div>
-                    <h2 className="font-display text-2xl font-semibold tracking-tight">
-                      Moodboard
-                    </h2>
-                    <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                      Six directions · one brief
-                    </p>
-                  </div>
-                  <span className="font-mono text-sm tabular-nums text-primary">
-                    {concepts.length} / 6
-                  </span>
-                </div>
-                <ConceptGrid
-                  concepts={concepts}
-                  onGenerateSide={generateSide}
-                  onSaveEdit={handleSaveEdit}
-                  onExport={handleExport}
+              <>
+                <MoodboardSection
+                  moodboards={moodboards}
+                  onGenerateMood={generateMood}
                 />
-              </div>
+
+                <section className="space-y-5">
+                  <div className="flex items-end justify-between border-b border-border/70 pb-3">
+                    <div>
+                      <h2 className="font-display text-2xl font-semibold tracking-tight">
+                        Homepages from the moodboards
+                      </h2>
+                      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                        Two variations per direction · six total
+                      </p>
+                    </div>
+                    <span className="font-mono text-sm tabular-nums text-primary">
+                      {concepts.length} / 6
+                    </span>
+                  </div>
+                  <ConceptGrid
+                    concepts={concepts}
+                    onGenerateSide={generateSide}
+                    onSaveEdit={handleSaveEdit}
+                    onExport={handleExport}
+                  />
+                </section>
+              </>
             )}
-          </section>
+          </div>
         </div>
       </main>
     </>

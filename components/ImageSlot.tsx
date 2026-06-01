@@ -8,7 +8,7 @@ import type { ConceptImage } from "@/lib/types";
 interface ImageSlotProps {
   label: string;
   image: ConceptImage;
-  aspect?: "16/9" | "4/3";
+  aspect?: "16/9" | "4/3" | "1/1";
   /** Shown when status is "idle" — e.g. a "Generate" button. */
   idleAction?: React.ReactNode;
   onRetry?: () => void;
@@ -21,7 +21,12 @@ export function ImageSlot({
   idleAction,
   onRetry,
 }: ImageSlotProps) {
-  const ratio = aspect === "16/9" ? "aspect-video" : "aspect-[4/3]";
+  const ratio =
+    aspect === "16/9"
+      ? "aspect-video"
+      : aspect === "1/1"
+        ? "aspect-square"
+        : "aspect-[4/3]";
 
   return (
     <div className="space-y-1.5">

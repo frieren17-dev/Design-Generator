@@ -1,14 +1,18 @@
-import type { Concept, DesignInputs, PersistedState } from "./types";
+import type { Concept, DesignInputs, Moodboard, PersistedState } from "./types";
 
 /**
- * localStorage persistence for inputs + concepts. Versioned so the schema can
- * evolve without crashing on stale data.
+ * localStorage persistence for inputs + moodboards + concepts. Versioned so the
+ * schema can evolve without crashing on stale data.
  */
 
-const STORAGE_KEY = "dcg:v1";
-const STORAGE_VERSION = 1;
+const STORAGE_KEY = "dcg:v2";
+const STORAGE_VERSION = 2;
 
-export function loadState(): { inputs: DesignInputs; concepts: Concept[] } | null {
+export function loadState(): {
+  inputs: DesignInputs;
+  moodboards: Moodboard[];
+  concepts: Concept[];
+} | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -17,20 +21,34 @@ export function loadState(): { inputs: DesignInputs; concepts: Concept[] } | nul
     if (
       parsed?.version !== STORAGE_VERSION ||
       !parsed.inputs ||
-      !Array.isArray(parsed.concepts)
+      !Array.isArray(parsed.concepts) ||
+      !Array.isArray(parsed.moodboards)
     ) {
       return null;
     }
-    return { inputs: parsed.inputs, concepts: parsed.concepts };
+    return {
+      inputs: parsed.inputs,
+      moodboards: parsed.moodboards,
+      concepts: parsed.concepts,
+    };
   } catch {
     return null;
   }
 }
 
-export function saveState(inputs: DesignInputs, concepts: Concept[]): void {
+export function saveState(
+  inputs: DesignInputs,
+  moodboards: Moodboard[],
+  concepts: Concept[],
+): void {
   if (typeof window === "undefined") return;
   try {
-    const payload: PersistedState = { version: STORAGE_VERSION, inputs, concepts };
+    const payload: PersistedState = {
+      version: STORAGE_VERSION,
+      inputs,
+      moodboards,
+      concepts,
+    };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {
     // Quota or serialization failure — non-fatal; state simply won't persist.

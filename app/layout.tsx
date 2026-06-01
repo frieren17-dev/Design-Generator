@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
-import { Fraunces, Hanken_Grotesk, DM_Mono } from "next/font/google";
+import {
+  Fraunces,
+  Hanken_Grotesk,
+  DM_Mono,
+  Bricolage_Grotesque,
+} from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -23,6 +28,13 @@ const dmMono = DM_Mono({
   weight: ["400", "500"],
 });
 
+// Alternate display: Bricolage Grotesque — characterful for contemporary/dynamic
+// type specimens shown on the moodboards.
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-bricolage",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
   title: "Design Concept Generator — FrontEnd",
   description:
@@ -37,7 +49,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fraunces.variable} ${hanken.variable} ${dmMono.variable} h-full antialiased`}
+      className={`${fraunces.variable} ${hanken.variable} ${dmMono.variable} ${bricolage.variable} h-full antialiased`}
     >
       <body className="bg-canvas relative min-h-full flex flex-col">
         {/* Atmosphere: warm radial glow + paper grain, behind everything. */}

@@ -20,15 +20,17 @@ export async function POST(req: Request): Promise<NextResponse<GenerateResponse>
   if (!prompt) {
     return NextResponse.json({ error: "A prompt is required." }, { status: 400 });
   }
-  if (side !== "front" && side !== "back") {
+  if (side !== "front" && side !== "back" && side !== "mood") {
     return NextResponse.json(
-      { error: "side must be 'front' or 'back'." },
+      { error: "side must be 'front', 'back', or 'mood'." },
       { status: 400 },
     );
   }
 
-  // Homepage (front) reads best wide; inner sections (back) at 4:3.
-  const aspectRatio: AspectRatio = side === "front" ? "16:9" : "4:3";
+  // Homepage (front) reads best wide; inner sections (back) at 4:3; the
+  // moodboard mood image is a square reference collage.
+  const aspectRatio: AspectRatio =
+    side === "front" ? "16:9" : side === "back" ? "4:3" : "1:1";
 
   try {
     const { url, taskId } = await generateImage(prompt, aspectRatio);

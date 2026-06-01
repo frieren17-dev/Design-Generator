@@ -4,8 +4,11 @@ export type StyleCategory = "Minimalist" | "Contemporary" | "Dynamic";
 
 export type ImageStatus = "idle" | "loading" | "done" | "error";
 
-/** Side of a concept: the homepage ("front") or inner sections ("back"). */
-export type ConceptSide = "front" | "back";
+/**
+ * What is being generated: a concept's homepage ("front"), its inner sections
+ * ("back"), or a moodboard's reference/mood image ("mood").
+ */
+export type ConceptSide = "front" | "back" | "mood";
 
 /** Generation state for a single image (front or back) of a concept. */
 export interface ConceptImage {
@@ -35,10 +38,43 @@ export interface Concept {
   backImage: ConceptImage;
 }
 
+/** A single named color swatch on a moodboard. */
+export interface Swatch {
+  role: string; // e.g. "Paper", "Ink", "Accent"
+  hex: string;
+}
+
+/** A display + body type pairing shown as a specimen. */
+export interface TypePairing {
+  displayName: string;
+  displayVar: string; // CSS font-family value, e.g. "var(--font-display)"
+  bodyName: string;
+  bodyVar: string;
+  rule: string; // short art-direction note
+}
+
+/**
+ * A curated reference board for one style direction — the inspiration the
+ * homepage concepts are designed from. Color, typography, imagery, UI patterns.
+ */
+export interface Moodboard {
+  id: string;
+  category: StyleCategory;
+  direction: string; // the board's name, e.g. "Quiet & Considered"
+  summary: string;
+  keywords: string[];
+  palette: Swatch[];
+  type: TypePairing;
+  patterns: string[];
+  moodPrompt: string;
+  moodImage: ConceptImage; // AI-generated texture/material collage
+}
+
 /** Persisted application state (localStorage). */
 export interface PersistedState {
   version: number;
   inputs: DesignInputs;
+  moodboards: Moodboard[];
   concepts: Concept[];
 }
 

@@ -9,7 +9,7 @@ const CATEGORIES = [
 export function Header() {
   return (
     <header className="relative overflow-hidden border-b border-border/70">
-      <div className="mx-auto w-full max-w-6xl px-4 pt-7 pb-9 sm:pt-9 sm:pb-12">
+      <div className="mx-auto w-full max-w-7xl px-4 pt-7 pb-9 sm:pt-9 sm:pb-12">
         {/* Utility row */}
         <div className="flex items-center justify-between font-mono text-[11px] uppercase tracking-[0.22em] text-muted-foreground animate-rise">
           <span className="flex items-center gap-2">
